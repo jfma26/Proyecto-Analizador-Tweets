@@ -1,0 +1,213 @@
+
+
+curl -XPUT 'localhost:9200/_river/quitos/_meta' -d '{
+  "type":"couchdb",
+  "couchdb": {
+    "host":"localhost",
+    "port":"5984",    
+    "db":"tweets",
+    "view":"ecuadorcode/_view/ecuadorcode"
+       },
+    "index" : {
+        "index" : "quitos",
+        "type" : "couchdb",
+        "bulk_size" : "100",
+        "bulk_timeout" : "1ms"
+    }
+}'
+
+__author__ = 'elikary'
+
+'''
+
+
+ QUITO
+==============
+'''
+import couchdb
+import sys
+import textblob
+import os
+import re
+import json
+
+from couchdb import view
+from textblob import TextBlob
+
+URL = 'localhost'
+db_name = 'tweets'
+
+
+'''========couchdb'=========='''
+server = couchdb.Server('http://'+URL+':5984/')
+#conexion base de datos
+try:
+    print(db_name)
+    db = server[db_name]
+    print('success')
+
+except:
+    sys.stderr.write("Error: DB not found. Closing...\n")
+    sys.exit()
+#vista 
+view = "ecuadorcode/ecuadorcode"
+#trainer 
+from textblob.classifiers import NaiveBayesClassifier
+train={('Y mientras tanto en Ecuador voy a votar por Dalo para que lo dejen volver','negativo'),
+('Absoluta verdad denuncio con nombres y apellidos, ahora ya hay muchos denunciantes,Vos tambien','negativo'),
+('SI mantiene el ritmo llega fresquito a la segunda vuelta, para rematar el campeonato','negativo'),
+('Si Abdala regresa, traera los costales o los dejara en Panama ','negativo'),
+('HASTA EL LENNIN ES EL TITERE DEL MASHI SIN TOMAR ENCUENTA LOS CHIMBADORES DEL PACO MONCAYO PESANTES EL HIJO DE ABDALA LOS DEL MPD','negativo'),
+('El IESS debe garantizar que los jubilados tengan una buena calidad de vida cuando se retiren.','positivo'),
+('En La Concordia mantuvimos una entrevista con Super W Noticias.','neutro'),
+('La confianza del Pueblo ecuatoriano con su gobierno esta terminada','positivo'),
+('Dile no a los detractores del bienestar de los Pobres,son Mauricio Pozo, Patricio Zuquilanda, Paco Moncayo, Guillermo Lasso','negativo'),
+('La honradez se practica con el ejemplo, si la cabeza no esta bien el sistema no esta bien.','neutro'),
+('Con nuestros amigos de la comuna Mushullacta Cotundo','neutro'),
+('Vamos a desarrollar el agro para que los campesinos tengan mejor calidad de vida','negativo'),
+('Continuamos nuestro camino por el Napo en la comuna Sabata','neutro'),
+('En Orellana todos saben que Zuquilanda es la Solucion','positivo'),
+('El mejor candidato para la Presidencia del Ecuador es el Dr. Patricio Zuquilanda','negativo'),
+('Lasso Viteri Moncayo Zuquilanda Espinel Bucarm nada de propuestas solo ataques','negativo'),
+('Sabemos como generar el desarrollo y la riqueza para las provincias fronterizas','negativo'),
+('me gusta la madurez temple y sencillez q demuestras Patricio y mas cuando no exageras como otros saludos en sus propuestas','positivo'),
+('El viernes y el sabado estaran en Guayaquil, el Ing. Lucio Gutierrez y el Dr. Patricio Zuquilanda','neutro'),
+('Duque no contempla nada sobre internet y TICs, conoce a candidatos que si lo hacen','neutro'),
+('Zuquilanda aseguro que la primera accion que ejecutaria de ganar la Presidencia seria entregar a Julian Assange','neutro'),
+('me gustaria conversar con usted sobre los ninos discapacitados y la falta de apoyo que tenemos sus familias','neutro'),
+('Si Lenin se niega a debatir con Lasso es que de verdad no sabe nada','negativo'),
+('Febrero llega pronto, ya quiero que Lasso y Paez ganen la presidencia y metan presos a todos esos ladrones que no','positivo'),
+('No Lasso no, debatir no es convencer a la tendera del banco del barrio.','negativo'),
+('el banquero Lasso  causante del feriado bancario esta desesperado q debata con los otros candidatos de la partidicracia','neutro'),
+('Con Guillermo Lasso en la Presidencia, se saldra del extractivismo para pasar a un modelo basado en la','neutro'),
+('si solo estan esperando que gane Lasso para cerrar las negociaciones','neutro'),
+('Yo OFREZCO que todos los ecuatorianos viajaremos a la luna sin visa. Como lo hare? Ahi esta el detalle','negativo'),
+('Guillermo Lasso: la mayoria del pueblo ecuatoriano no cree en la neutralidad del CNE','negativo'),
+('me parece muy bien! no votare por usted prefiero a Cynthia ambos estan en caminos similares','negativo'),
+('El hombre que practica con el ejemplo es creible, el que no lo hace es falso profeta como Lasso','negativo'),
+('Gracias Alvaro Noboa, pero le toca a Guillermo Lasso tomar tu puesto','neutro'),
+('Este pais esta podrido largatecorrea y llevate a CynthiaViteri6 y mariapaularomo ','negativo'),
+('CynthiaViteri6 ramiroaguilart ampliaria a 9 o subieria un 9 encima de donde esta','positivo'),
+('Hoy CynthiaViteri6  cerro una etapa pero inicia una nueva. CambioPositivo Cynthia2017','positivo'),
+('CynthiaViteri6 se refirio asi a su companiero de formula que oficializara en algo mas de una hora en Quito','neutro'),
+('CynthiaViteri6 dio a conocer su candidato a vicepresidente','neutro'),
+('Por que no aceptaste la candidatura a la vicepresidencia con Cynthia','neutro'),
+('LassoGuillermo JuanPabloPozoB me parece muy bien no votare por usted prefiero a Cynthia ambos estan en caminos similares','neutro'),
+('CynthiaViteri6 dio a conocer su binomio','neutro'),
+('CynthiaViteri6 LassoGuillermo Dios permita que no se cante nunca mas','negativo'),
+('CynthiaViteri6 jaimenebotsaadi  ALANGASI LE APOYA PARA LLEGAR AL OBJETIVO. CINTHYA PRESIDENTA DE LA REPUBLICA DEL ECUADOR','positivo'),
+('CynthiaViteri6. Me gusta mucho el Binomio. Confiamos en ese anhelado CambioPositivo propuesto','positivo'),
+('CynthiaViteri6 no se q es peor, glass el saqueador de petroecuador y vienen por mas','negativo'),
+('CynthiaViteri6 leonardoviteri Te creemos no importa lo que borreguitos digan. Ellos si le han mentido al pais. Vamos Cynthia','positivo'),
+('EN VIVO  Mano a mano con el economista MauricioPozoEC Tema binomio presidencial con CynthiaViteri6','neutro'),
+('las cualidades de una persona como CynthiaViteri6 no son faciles de encontrar','positivo'),
+('EN VIVO  Mano a mano con el economista MauricioPozoEC Tema binomio presidencial con CynthiaViteri6','neutro'),
+('MauricioPozoEC CynthiaViteri6  Ud SIII es un Economista q con honor lleva su titulo, lo ha demostrado al paso de los anos','positivo'),
+('Si Lasso entra a segunda velta a quien tendran que apoyar  Seniora CynthiaViteri6 no escupa al cielo','negativo'),
+('SoloHayUnDios ecuadorenvivo CynthiaViteri6  Abrir la boca y decir q la deportada tiene conciencia social es como decir q Nebot es santo','negativo'),
+('CynthiaViteri6  en politicamente correcto pura demagogia Tiene q mejorar su discurso','negativo'),
+('Eliminar tres impuestos seria politicamente correcto o provocaria mayor inestabilidad en el pais PoliticamenteCorrecto CynthiaViteri','neutro'),
+('PacoMoncayo perdona mariapaularomo pero esto es una extralimitacion del discurso politico, es un retroceso en PoliticaPublica Criminal','negativo'),
+('Inscripcion Binomio Presidencial PacoMoncayo MonserrattBustamante','neutro'),
+('PacoMoncayo Wilma Andrade insistio en diversas entrevistas que haran reformas a la Ley de Comunicacion. No derogaran la ley','neutro'),
+('PacoMoncayo Esperamos terminen con esa lacra d elites Ofc militares con pensiones d 5000 y bonos d 350.000 BASTA','negativo'),
+('GRAL PACO MONCAYO CANDIDATO PRESIDENCIAL TEMA: SU PROYECTO DE GOBIERNO, EN BUSQUEDA DE LA PRESIDENCIA DE LA REPUBLICA','neutro'),
+('PacoMoncayo tenemos un pais extraordinario, con la mejor gente, pacifica, somos un pais rico, pero mal administrado. Notihoy','positivo'),
+('PacoMoncayo hay que eliminar ciertos elementos toxicos de la ley de comunicacion, es parte de la libertad de expresion. Notihoy','neutro'),
+('PacoMoncayo tenemos que estimular que retorne el ahorro que se ha ido a otros paises, hay que evitar la volatilidad normativa. Notihoy','neutro'),
+('PacoMoncayo no ha funcionado en el mundo el autoritarismo, necesitamos una asamblea que legisle, no que tramite los deseos del ejecutivo','negativo'),
+('PacoMoncayo ha gastado el gobierno 1.200 millones en propaganda, si eso se hubiera invertido en el agro no estaria abandonado. Notihoy','negativo'),
+('PacoMoncayo 70 por ciento de los contratos se han hecho sin proceso licitatorio, hay que fiscalizar esos contratos, tenemos las carreteras mas caras','negativo'),
+('pelagatos4 tremendo error de Paco, es desconocida incluso en el circulo academico, y no suma, lo que debe hacer un binomio por logica','negativo'),
+('El apoyo al binomio Lenin JorgeGlas llega de todos los rincones de la region','neutro'),
+('Lenin q caballero es usted Don Lenin.  Diferencia con otros','positivo'),
+('Desde Venezuela el PartidoPSUV saluda postulacion de Lenin y JorgeGlas','neutro'),
+('El MovimientoEvita de Argentina expresa su apoyo a 35PAIS y su respaldo al binomio presidencial Lenin','positivo'),
+('Vamos Lenin','positivo'),
+('Hoy empieza el camino hacia la Presidencia con Lenin Moreno, para darle continuidad a La Revolucion Ciudadana','positivo'),
+('Lenin Presidente dos palabras con millones de corazones comprometidos','neutro'),
+('LeninPresidente  encendemos los motores para profundizar contacto con el pueblo','positivo'),
+('Gran alegria en la concentracion en la sede de AP, listos para acompaniar a la inscripcion de nuestro binomio Lenin','positivo'),
+('El binomio de la victoria. Juntos somos invencibles Lenin','positivo'),
+('En estos momentos desde CNE listos a recibir el binomio JorgeGlas Lenin cuenta con un ejercito de corazones apoyo','neutro'),
+('APOYO INCONDICIONAL  leninPresidente VIVA LA REVOLUCION','positivo'),
+('Lenin abrazo afectuoso ahora que asumes un gran desafio. Fuerza y exito querido amigo','positivo'),
+('Hoy empieza el camino a la victoria, Lenin ya eres nuestro Presidente','positivo'),
+('Lenin vamos a dejar el alma en esta campania y la vamos a ganar','positivo'),
+('Lenin JorgeGlas Estan acabados companieritos, mejor desistan a tiempo porque si tardan la caida sera mas fuerte','negativo'),
+('Este momento fuera del CNE leninPresidente puro borrego creando caos','negativo'),
+('Alianza PAIS inscribio oficialmente binomio Lenin Moreno Jorge Glas en instalaciones del CNE','neutro'),
+('LeninPresidente. Que chiste. Como si fuesemos tontos.','negativo'),
+('Lenin JorgeGlas disculpe pero esta incumpliendo su palabra en la que se refirio que ya no iba a participar mas en politica, que paso','negativo'),
+('ECUATORIANOS NI LENIN  NI GLAS CORRPCION NUNCA MAS','positivo'),
+('Alex Alcivar binomio de Washington Pesantez presentaron sus candidaturas ante CNE','neutro'),
+('Washington prepara una nueva revolucion: meteorologica','neutro'),
+('Washington Pesantez: hay que renegociar la deuda cara, por otra menos cara','neutro'),
+('Washington Pesantez: no soy experto en materia economica por ello nos rodearemos de expertos que nos guien en ello','neutro'),
+('Ya no le den mas al Washington Pesantez','neutro'),
+('Washington Pesantez es como de otro planeta, no recuerda que pertenecio al gobierno actual, y su actuacion','negativo'),
+('Washington Pesantez no tiene idea d que hacer en la presidencia. Solo es un feo narcisista q necesita poder en su mente para alimentar su ego','negativo'),
+('Este tipo quiere ser nuestro presidente. Por favor castiguemos en las urnas. Rechazo total a Lenin Moreno','negativo'),
+('Lenin Moreno lo dice, luego de 10 a@os necesitamos cirugia mayor. A parte de bruto es descarado; si con plata la cagaron, sin plata peor','negativo'),
+('Lenin Moreno rechaza violencia en Morona Santiago y hace un llamado al dialogo para solventar diferencias','neutro'),
+('Lenin Moreno propone mismas garantias para miembros de Fuerzas Armadas','neutro'),
+('lenin moreno hablando de corruptos. el cerdo hablando de suciedad.el cocodrilo hablando de trompudos. No te queda ese habito lenin','negativo'),
+('Concejales califican de desagradable y lamentable sesion del Concejo Quito convocada por alcalde','negativo'),
+('Ya saldran las cotorras a hablar de derechos humanos.','negativo'),
+('si usted en el mejor de los casos llega a ser presidente, tengalo por seguro esa rata de Paez le va a traicionar','negativo'),
+('aunque se haya juntado con Lasso y el no le convence , usted tiene mi voto, confio en usted','positivo'),
+('Gracias futuro presidente, eso es lo que el pueblo desea.','positivo'),
+('Por esta clase de politicos tenemos lo q nos merecemos No mas idiotas no mas APs apestan es como oir a lasso o a','negativo'),
+('Ministro de Educacion contradice a Lenin Moreno sobre planteles.','negativo'),
+('Como no apoyar tu noble y solidaria gestion','positivo'),
+('Con ese corazon vacio para mi PATRIA,pretenden que, gobernar? No, basta carajo!','negativo'),
+('mi General esta moviendo mal las fichas','negativo'),
+('Paquito ud tiene mi voto..hombre tranquilo que escucha sobrio prudente.Siga asi general','positivo'),
+('Que paso pablito desde que empeso el programa enojado hagan lo que les de la pongan lo que quiera la musica que sea','negativo'),
+('Aplicando la tipica de siempre, la que no falla, Yo salgo mas enojado','negativo'),
+('Hay una gran diferencia entre estar enojado y decepcionado','negativo'),
+('Alejandrocor uy ese chico muy enojado','negativo'),
+('Video hincha enojado destroza televisor y laptop por culpa de la mala senia','negativo'),
+('No me habia enojado desde que empece a realizar los tramites de graduacion','negativo'),
+('me voy a dormir enojado ahora','negativo'),
+('Lo unico que me hace feliz es que maniana vienen mis papas','positivo'),
+('Y poco a poco se van sumando mas cosas, Yo felizmente tengo buena memoria','positivo'),
+('QUIERO DECIRLE AL MUNDO QUE NO SOMOS AMIGOS yunaimejoselinj  GRACIAS POR HACERME FELIZ MI AMOR BELLA','positivo'),
+('Las mamas y sus horas jajajaja feliz viernes para todos','positivo'),
+('FelizViernes Los desafios hacen interesante a la vida y superarlos es lo que la hace significativa','positivo'),
+('Las mamas y sus horas jajajaja feliz viernes para todos','positivo'),
+('Feliz cumpleanios GERARDO MORAN, DIOS lo bendiga siempre a usted y su hermosa familia, que Viva el cumpleaniero','positivo'),
+('a llegado la epoca mas feliz de mi vida luces y colores los amo despues de tanto  saliendo del abismo','positivo'),
+('A comenzar el dia llenos de energia felizviernes','positivo'),
+('TuJuliaSumisa nmuy buen dia Feliz veranooooo','positivo'),
+('Primera sesion a este proyecto que no acostumbro mucho a realizar, pero muy contento con el','positivo'),
+('Son los ultimos partidos con el club y creo que estoy contento por todo lo que logre aca','positivo'),
+('Mi corazon amarillo esta contento por tu nuevo campeonato','positivo'),
+('Jueves 8, vamos a la Av.de los Shiris a manifestar nuestro descontento y oposicion a Ley de Plusvalia, por absurda y loca','positivo'),
+}
+#entranemiento clasificador
+cl = NaiveBayesClassifier(train)
+test =[('Paquito ud tiene mi voto..hombre tranquilo que escucha sobrio prudente.Siga asi general','positivo'),
+         ('bueno tiene opciones: Moncayo y ex Apes, Cinthya y Gonzales, Alvarito y Luci, Dalo  Lasso para mi ya no se ve tan mal','positivo'),
+         ('Don Rodrigo Paz tratandome de convencer para votar por Cinthia, como hace unos meses su hijo me trataba de convencer por el Dios Tenorio.','negativo'),
+         ('Usted es buen referente, adelante!','positivo'),
+         ('Dalo es el unico candidato, despues de Lenin, que proviene de una seudo dinastia que se cree destinada a GOBERNAR A LA PLEBE!!','negativo')]
+LIMIT_OF_DOCUMENTS = 1000
+print cl.accuracy(test)
+url = 'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+url2= '(www\.)(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+patron2 = re.compile('#|@|'+url+'|'+url2)
+
+while len(db.view(view, limit=LIMIT_OF_DOCUMENTS)) > 0:
+    for data in db.view(view, limit=LIMIT_OF_DOCUMENTS):
+        json_data = {}
+        json_data = db.get(data['id'])
+        text_es = data['value']
+        json_data['label'] = {'polarity': cl.classify(text_es)}
+        text_es = string = patron2.sub('', text_es)
+        json_data['value'] = string
+        try:
+            db.save(json_data)
+        except:
+            print("Data repeated...")
+
